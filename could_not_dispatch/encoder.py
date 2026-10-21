@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import functools
+import subprocess
 from dataclasses import dataclass
 
 from .constants import (
@@ -105,14 +107,46 @@ def scale_filter(options: EncodeOptions) -> str:
     )
 
 
-def build_command(media: Media, options: EncodeOptions, executable: str = "ffmpeg") -> list[str]:
+@functools.cache
+def ffmpeg_supports_readrate(executable: str = "ffmpeg") -> bool:
+    """-readrate/-readrate_initial_burst were added in FFmpeg 6.1 (2023-11). On an
+    older build (e.g. FFmpeg 4.4.x, as still shipped by Ubuntu 22.04's apt repo for
+    a non-Docker/native Dispatcharr install) ffmpeg exits immediately with
+    "Unrecognized option 'readrate'" and the fallback never produces a frame. Probe
+    once per executable and cache the result; `-h full` is cheap and has no side
+    effects.
+    """
+    try:
+        probe = subprocess.run(
+            [executable, "-hide_banner", "-h", "full"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return "readrate" in probe.stdout
+
+
+def build_command(
+    media: Media,
+    options: EncodeOptions,
+    executable: str = "ffmpeg",
+    supports_readrate: bool = True,
+) -> list[str]:
     command = [executable, "-hide_banner", "-loglevel", "error", "-nostdin"]
-    pacing = [
-        "-readrate",
-        "1",
-        "-readrate_initial_burst",
-        str(options.initial_burst_seconds),
-    ]
+    if supports_readrate:
+        pacing = [
+            "-readrate",
+            "1",
+            "-readrate_initial_burst",
+            str(options.initial_burst_seconds),
+        ]
+    else:
+        # Steady real-time pacing without the fast-burst startup phase. Slower to
+        # first byte (whole seconds rather than the ~0.29s the burst gives you) but
+        # correct on any ffmpeg build, rather than failing to start at all.
+        pacing = ["-re"]
 
     if media.kind == KIND_IMAGE:
         command += [*pacing, "-loop", "1", "-i", str(media.path)]
