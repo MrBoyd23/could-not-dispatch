@@ -1,19 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.5.1 — 2026-10-24
 
-- The encoder never started on FFmpeg 4.4.x — still the version Ubuntu 22.04's own apt
-  repo ships, and so still what a native (non-Docker) Dispatcharr install gets unless
-  something else pulled in a newer build. `-readrate`/`-readrate_initial_burst` were
-  added in FFmpeg 6.1 (2023-11); on 4.4.x ffmpeg exits immediately with "Unrecognized
-  option 'readrate'", so the fallback 503'd every time a viewer actually reached it —
-  confirmed live on such a box: every channel that failed over to the card sat on
-  nothing for the full 20-second chunk timeout before falling back to its still-dead
-  original stream, instead of showing the card. The server now probes the configured
-  `ffmpeg` once (`ffmpeg_supports_readrate()`, `-h full`, cached) and falls back to
-  `-re` for steady real-time pacing when `-readrate` isn't there — correct on any
-  ffmpeg build, a few seconds slower to first byte than the burst path instead of
-  not starting at all.
+- The card starts on FFmpeg older than 6.1, which has no `-readrate_initial_burst`: Ubuntu
+  22.04 ships 4.4 and Debian 12 ships 5.1, and on a native install the encoder exited at once
+  and every channel sent to the card froze for 20 seconds. The server asks ffmpeg once whether
+  it has the option and otherwise paces with `-re`, a few seconds slower to the first picture.
+  Thanks to [@MrBoyd23](https://github.com/MrBoyd23), who found it and wrote the fix (#2, #3).
 
 ## 0.5.0 — 2026-10-07
 

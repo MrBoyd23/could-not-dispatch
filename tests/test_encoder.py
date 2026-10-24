@@ -27,11 +27,6 @@ def test_the_first_seconds_are_produced_as_fast_as_possible():
 
 
 def test_an_ffmpeg_without_readrate_falls_back_to_steady_pacing():
-    # FFmpeg 4.4.x (still Ubuntu 22.04's apt package, i.e. a native/non-Docker
-    # Dispatcharr install) predates -readrate/-readrate_initial_burst (FFmpeg 6.1,
-    # 2023-11) and exits immediately with "Unrecognized option 'readrate'" if asked
-    # for them. The caller detects that once via ffmpeg_supports_readrate() and
-    # passes supports_readrate=False; the command it gets back must still start.
     command = build_command(
         Media(Path("/data/slate.png"), KIND_IMAGE, has_audio=False),
         _options(),
@@ -228,9 +223,15 @@ def test_ffmpeg_supports_readrate_reads_the_build_s_own_help_text(monkeypatch):
 
 
 def test_ffmpeg_supports_readrate_is_false_on_an_older_build(monkeypatch):
-    # FFmpeg 4.4.x's own -h full output has no "readrate" anywhere in it.
     monkeypatch.setattr(subprocess, "run", lambda command, **kwargs: _FakeCompletedProcess(""))
     assert ffmpeg_supports_readrate("ffmpeg-4.4-build") is False
+
+
+def test_an_ffmpeg_with_readrate_but_no_initial_burst_counts_as_unsupported(monkeypatch):
+    monkeypatch.setattr(
+        subprocess, "run", lambda command, **kwargs: _FakeCompletedProcess("... -readrate ...")
+    )
+    assert ffmpeg_supports_readrate("ffmpeg-5.1-build") is False
 
 
 def test_ffmpeg_supports_readrate_is_false_rather_than_raising_when_ffmpeg_is_missing(
